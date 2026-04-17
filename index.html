@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hostel Investment Calculator</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Recharts Dependencies -->
+  <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+  <script src="https://unpkg.com/react-is@18.2.0/umd/react-is.production.min.js"></script>
+
+  <!-- Recharts (Pinned to stable version to prevent ForwardRef errors) -->
+  <script src="https://unpkg.com/recharts@2.1.12/umd/Recharts.js"></script>
+  
+  <!-- Babel (for compiling JSX in the browser) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Firebase Import Map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "firebase/app": "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Arial Narrow', 'Roboto Condensed', sans-serif;
+      background-color: #f1f5f9; /* slate-100 */
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import { initializeApp } from 'firebase/app';
+    import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+    import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
+
+    // Import from Globals
+    const { useState, useMemo, useEffect } = React;
+    const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } = Recharts;
+
+    // --- Inline Icons (Replaces lucide-react for standalone HTML) ---
+    const SvgIcon = ({ children, size=24, className="" }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        {children}
+      </svg>
+    );
+    const Calculator = (p) => <SvgIcon {...p}><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16.01" y1="10" y2="10"/><line x1="8" x2="8.01" y1="10" y2="10"/><line x1="12" x2="12.01" y1="10" y2="10"/><line x1="16" x2="16.01" y1="14" y2="14"/><line x1="8" x2="8.01" y1="14" y2="14"/><line x1="12" x2="12.01" y1="14" y2="14"/><line x1="16" x2="16.01" y1="18" y2="18"/><line x1="8" x2="8.01" y1="18" y2="18"/><line x1="12" x2="12.01" y1="18" y2="18"/></SvgIcon>;
+    const Settings2 = (p) => <SvgIcon {...p}><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="7" r="3"/><circle cx="8" cy="17" r="3"/></SvgIcon>;
+    const TrendingDown = (p) => <SvgIcon {...p}><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></SvgIcon>;
+    const Target = (p) => <SvgIcon {...p}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></SvgIcon>;
+    const Zap = (p) => <SvgIcon {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></SvgIcon>;
+    const Layers = (p) => <SvgIcon {...p}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></SvgIcon>;
+    const ShieldCheck = (p) => <SvgIcon {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></SvgIcon>;
+    const Percent = (p) => <SvgIcon {...p}><line x1="19" x2="5" y1="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></SvgIcon>;
+    const Save = (p) => <SvgIcon {...p}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></SvgIcon>;
+    const Plus = (p) => <SvgIcon {...p}><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></SvgIcon>;
+    const Trash2 = (p) => <SvgIcon {...p}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></SvgIcon>;
+    const FolderOpen = (p) => <SvgIcon {...p}><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></SvgIcon>;
+
+    // --- Firebase Setup ---
+    const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? JSON.parse(window.__firebase_config) : {};
+    let app, auth, db;
+    try {
+      if (Object.keys(firebaseConfig).length > 0) {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+      }
+    } catch(e) {
+      console.log("Firebase setup skipped/failed. Save features disabled locally.");
+    }
+    const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'hostel-analyzer-local';
+
+    // --- Default Project Template ---
+    const defaultProject = {
+      id: null,
+      name: "100-Room Project",
+      numBeds: 100,
+      numRooms: 10,
+      minPrice: 200,
+      maxPrice: 700,
+      priceSteps: 10,
+      roomMinPrice: 1000,
+      roomMaxPrice: 3000,
+      minPayback: 1,
+      maxPayback: 5,
+      paybackSteps: 4,
+      costToBuy: 5000000,
+      deposit: 500000,
+      monthlyRent: 200000,
+      estimatedStaff: 70000,
+      estimatedBills: 50000,
+      commissionPct: 15
+    };
+
+    const App = () => {
+      const [project, setProject] = useState({ ...defaultProject });
+      const [activeTab, setActiveTab] = useState('table');
+      const [scenarioTier, setScenarioTier] = useState('dynamic');
+      
+      // --- Auth & DB State ---
+      const [user, setUser] = useState(null);
+      const [savedProjects, setSavedProjects] = useState([]);
+      const [isSaving, setIsSaving] = useState(false);
+
+      useEffect(() => {
+        if(!auth) return;
+        const initAuth = async () => {
+          try {
+            if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+              await signInWithCustomToken(auth, window.__initial_auth_token);
+            } else {
+              await signInAnonymously(auth);
+            }
+          } catch (error) {
+            console.error("Auth error:", error);
+          }
+        };
+        initAuth();
+        const unsubscribe = onAuthStateChanged(auth, setUser);
+        return () => unsubscribe();
+      }, []);
+
+      useEffect(() => {
+        if (!user || !db) return;
+        const projectsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'projects');
+        const unsubscribe = onSnapshot(projectsRef, (snapshot) => {
+          const loaded = [];
+          snapshot.forEach(doc => { loaded.push(doc.data()); });
+          loaded.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+          setSavedProjects(loaded);
+        }, (error) => console.error("Error fetching projects", error));
+        return () => unsubscribe();
+      }, [user]);
+
+      const handleSave = async () => {
+        if (!user || !db) { alert("Save requires Firebase configuration."); return; }
+        setIsSaving(true);
+        try {
+          const projectId = project.id || crypto.randomUUID();
+          const projectData = { ...project, id: projectId, updatedAt: new Date().toISOString() };
+          const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'projects', projectId);
+          await setDoc(docRef, projectData);
+          setProject(projectData);
+        } catch (error) {
+          console.error("Error saving project", error);
+        }
+        setIsSaving(false);
+      };
+
+      const handleLoad = (e) => {
+        const selectedId = e.target.value;
+        if (!selectedId) return;
+        const found = savedProjects.find(p => p.id === selectedId);
+        if (found) { setProject(found); setScenarioTier('dynamic'); }
+      };
+
+      const handleNewProject = () => {
+        setProject({ ...defaultProject, id: null });
+        setScenarioTier('dynamic');
+      };
+
+      const handleDeleteProject = async () => {
+        if (!user || !project.id || !db) return;
+        if (window.confirm("Are you sure you want to delete this project?")) {
+          try {
+            const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'projects', project.id);
+            await deleteDoc(docRef);
+            handleNewProject();
+          } catch (error) {
+            console.error("Error deleting project", error);
+          }
+        }
+      };
+
+      // --- Core Logic ---
+      const totals = useMemo(() => {
+        const totalSunk = (project.costToBuy || 0) + (project.deposit || 0);
+        const monthlyOpEx = (project.monthlyRent || 0) + (project.estimatedStaff || 0) + (project.estimatedBills || 0);
+        const yearlyOpEx = monthlyOpEx * 12;
+        return { totalSunk, monthlyOpEx, yearlyOpEx };
+      }, [project]);
+
+      const priceTiers = useMemo(() => {
+        const tiers = [];
+        const steps = Math.max(1, project.priceSteps || 1);
+        const bedIncrement = (project.maxPrice - project.minPrice) / steps;
+        const roomIncrement = (project.roomMaxPrice - project.roomMinPrice) / steps;
+        for (let i = 0; i <= steps; i++) {
+          tiers.push({
+            bedPrice: Math.round(project.minPrice + (i * bedIncrement)),
+            roomPrice: Math.round(project.roomMinPrice + (i * roomIncrement))
+          });
+        }
+        return tiers;
+      }, [project.minPrice, project.maxPrice, project.priceSteps, project.roomMinPrice, project.roomMaxPrice]);
+
+      const occupancyLevels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+
+      const paybackTargets = useMemo(() => {
+        const targets = [];
+        const steps = Math.max(1, project.paybackSteps || 1);
+        const range = project.maxPayback - project.minPayback;
+        const increment = range / steps;
+        for (let i = 0; i <= steps; i++) {
+          const y = project.minPayback + (i * increment);
+          const months = y * 12;
+          const monthlyRequired = (totals.totalSunk + (totals.monthlyOpEx * months)) / months;
+          targets.push({ years: y, monthly: monthlyRequired });
+        }
+        return targets;
+      }, [project.minPayback, project.maxPayback, project.paybackSteps, totals]);
+
+      const baseScenarios = useMemo(() => {
+        const bedRange = project.maxPrice - project.minPrice;
+        const roomRange = project.roomMaxPrice - project.roomMinPrice;
+        return [
+          { label: 'FULL', occ: 1.0, bedPrice: project.maxPrice, roomPrice: project.roomMaxPrice },
+          { label: 'MAX', occ: 0.8, bedPrice: project.minPrice + (bedRange * 0.75), roomPrice: project.roomMinPrice + (roomRange * 0.75) },
+          { label: 'EXPECTED', occ: 0.6, bedPrice: project.minPrice + (bedRange * 0.5), roomPrice: project.roomMinPrice + (roomRange * 0.5) },
+          { label: 'HALF', occ: 0.5, bedPrice: project.minPrice + (bedRange * 0.5), roomPrice: project.roomMinPrice + (roomRange * 0.5) },
+          { label: 'MIN', occ: 0.4, bedPrice: project.minPrice + (bedRange * 0.25), roomPrice: project.roomMinPrice + (roomRange * 0.25) },
+          { label: 'LOW', occ: 0.2, bedPrice: project.minPrice, roomPrice: project.roomMinPrice }
+        ];
+      }, [project.maxPrice, project.minPrice, project.roomMaxPrice, project.roomMinPrice]);
+
+      const activeScenarios = useMemo(() => {
+        if (scenarioTier === 'dynamic') return baseScenarios;
+        const tier = priceTiers[parseInt(scenarioTier)];
+        if (!tier) return baseScenarios;
+        return [
+          { label: 'FULL', occ: 1.0, bedPrice: tier.bedPrice, roomPrice: tier.roomPrice },
+          { label: 'MAX', occ: 0.8, bedPrice: tier.bedPrice, roomPrice: tier.roomPrice },
+          { label: 'EXPECTED', occ: 0.6, bedPrice: tier.bedPrice, roomPrice: tier.roomPrice },
+          { label: 'HALF', occ: 0.5, bedPrice: tier.bedPrice, roomPrice: tier.roomPrice },
+          { label: 'MIN', occ: 0.4, bedPrice: tier.bedPrice, roomPrice: tier.roomPrice },
+          { label: 'LOW', occ: 0.2, bedPrice: tier.bedPrice, roomPrice: tier.roomPrice }
+        ];
+      }, [baseScenarios, scenarioTier, priceTiers]);
+
+      const chartData = useMemo(() => {
+        return occupancyLevels.map(occ => {
+          const entry = { occupancy: `${(occ * 100).toFixed(0)}%` };
+          priceTiers.forEach((tier, idx) => {
+            const net = ((project.numBeds * tier.bedPrice) + (project.numRooms * tier.roomPrice)) * occ * 30.42 * (1 - (project.commissionPct / 100));
+            entry[`Tier_${idx}`] = Math.round(net);
+          });
+          return entry;
+        });
+      }, [project, priceTiers]);
+
+      const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setProject(prev => ({ ...prev, [name]: name === 'name' ? value : parseFloat(value) || 0 }));
+      };
+
+      const formatCurrency = (val) => new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 }).format(val || 0);
+
+      const formatM = (val) => {
+        const v = val || 0;
+        if (Math.abs(v) >= 1000000) return (v / 1000000).toFixed(2) + 'M';
+        if (Math.abs(v) >= 1000) return (v / 1000).toFixed(0) + 'K';
+        return v;
+      };
+
+      const calculateRecoveryDisplay = (months) => {
+        if (!months || months === Infinity) return null;
+        const years = months / 12;
+        const rounded = Math.ceil(years * 4) / 4;
+        return rounded === 0 ? "0.25Y" : `${rounded}Y`.replace(".00", "");
+      };
+
+      const getCellStyles = (netMonthly) => {
+        const profit = netMonthly - totals.monthlyOpEx;
+        if (profit <= 0) return "bg-white text-slate-300 border-slate-200";
+        const months = totals.totalSunk / profit;
+        if (months <= 12) return "bg-emerald-600 text-white border-emerald-700";
+        if (months <= 24) return "bg-emerald-400 text-white border-emerald-500";
+        if (months <= 60) return "bg-emerald-50 text-emerald-800 border-emerald-200";
+        return "bg-blue-50 text-blue-700 border-blue-200";
+      };
+
+      return (
+        <div className="flex flex-col">
+          {/* Project Manager Top Bar */}
+          <div className="bg-slate-800 text-white p-2 px-4 rounded-t-xl max-w-[1700px] w-full mx-auto flex flex-wrap justify-between items-center shadow-sm z-10 relative">
+            <div className="flex items-center gap-4">
+              <span className="font-bold flex items-center gap-2 text-[14px]">
+                <FolderOpen size={16} className="text-blue-400" /> My Projects
+              </span>
+              <select 
+                className="bg-slate-700 border border-slate-600 rounded p-1.5 text-white outline-none text-[14px] min-w-[200px] cursor-pointer"
+                onChange={handleLoad}
+                value={project.id || ''}
+              >
+                <option value="" disabled>-- Unsaved Project --</option>
+                {savedProjects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 mt-2 sm:mt-0">
+              <button onClick={handleNewProject} className="bg-slate-700 hover:bg-slate-600 transition-colors px-3 py-1.5 rounded text-[13px] font-bold flex items-center gap-1">
+                <Plus size={14} /> New
+              </button>
+              <button onClick={handleSave} disabled={isSaving} className="bg-blue-600 hover:bg-blue-500 transition-colors px-3 py-1.5 rounded text-[13px] font-bold flex items-center gap-1">
+                <Save size={14} /> {isSaving ? 'Saving...' : 'Save'}
+              </button>
+              {project.id && (
+                <button onClick={handleDeleteProject} className="bg-red-900/50 hover:bg-red-600 transition-colors px-3 py-1.5 rounded text-[13px] font-bold flex items-center gap-1 text-red-100 border border-red-800">
+                  <Trash2 size={14} /> Delete
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="max-w-[1700px] w-full mx-auto space-y-3 bg-slate-50/50 rounded-b-xl pb-6">
+            
+            {/* Top Level Dashboard */}
+            <div className="bg-slate-900 text-white p-3 px-5 rounded-lg flex flex-wrap justify-between items-center shadow border-b-4 border-blue-500 gap-4 -mt-1 relative z-20">
+               <div>
+                 <h1 className="text-2xl font-black flex items-center gap-2 tracking-tight">
+                   <Calculator className="text-blue-400" size={24} />
+                   HOSTEL ANALYZER
+                 </h1>
+                 <p className="text-[14px] font-bold text-slate-400 uppercase tracking-widest">{project.name}</p>
+               </div>
+               <div className="flex flex-wrap gap-4">
+                 <div className="text-right px-4 border-r border-white/10">
+                   <p className="text-[12px] font-bold text-slate-400 uppercase leading-none mb-1">Total Sunk Capital</p>
+                   <p className="text-2xl font-black leading-none tracking-tighter text-white">฿{formatM(totals.totalSunk)}</p>
+                 </div>
+                 <div className="text-right px-4 border-r border-white/10">
+                   <p className="text-[12px] font-bold text-blue-300 uppercase leading-none mb-1">Monthly Operating</p>
+                   <p className="text-2xl font-black leading-none text-white">฿{formatCurrency(totals.monthlyOpEx)}</p>
+                 </div>
+                 <div className="text-right px-4">
+                   <p className="text-[12px] font-bold text-red-300 uppercase leading-none mb-1">Yearly Operating</p>
+                   <p className="text-2xl font-black leading-none text-red-100">฿{formatM(totals.yearlyOpEx)}</p>
+                 </div>
+               </div>
+            </div>
+
+            {/* Section: DETAILS */}
+            <div className="flex flex-wrap items-baseline gap-2 border-b-4 border-slate-300 pb-1 mt-8 mb-2 px-2">
+              <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">DETAILS</h2>
+              <span className="text-[13px] font-bold text-slate-400 hidden sm:inline">|</span>
+              <p className="text-[13px] font-bold text-slate-500 uppercase">Input property details</p>
+            </div>
+
+            {/* Square Input Cards Grid */}
+            <div className="flex flex-wrap gap-2.5 justify-start px-2">
+              <div className="bg-white p-3 rounded-lg border shadow-sm flex flex-col flex-1 min-w-[220px]">
+                <h3 className="text-blue-600 font-black uppercase text-[14px] mb-2 flex items-center gap-2 border-b pb-1">
+                  <Settings2 size={16} /> Setup
+                </h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-slate-500">Project</label>
+                    <input type="text" name="name" value={project.name} onChange={handleInputChange} className="w-32 border rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-blue-600">Beds</label>
+                    <input type="number" name="numBeds" value={project.numBeds} onChange={handleInputChange} className="w-20 border-2 border-blue-200 rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-blue-600">Rooms</label>
+                    <input type="number" name="numRooms" value={project.numRooms} onChange={handleInputChange} className="w-20 border-2 border-blue-200 rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border shadow-sm flex flex-col flex-1 min-w-[220px]">
+                <h3 className="text-orange-600 font-black uppercase text-[14px] mb-2 flex items-center gap-2 border-b pb-1">
+                  <Zap size={16} /> Capital
+                </h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-slate-500">Buy Price</label>
+                    <input type="number" name="costToBuy" value={project.costToBuy} onChange={handleInputChange} className="w-24 border rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-slate-500">Deposit</label>
+                    <input type="number" name="deposit" value={project.deposit} onChange={handleInputChange} className="w-24 border rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-slate-500">OTA %</label>
+                    <input type="number" name="commissionPct" value={project.commissionPct} onChange={handleInputChange} className="w-16 border rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border shadow-sm flex flex-col flex-1 min-w-[220px]">
+                <h3 className="text-red-600 font-black uppercase text-[14px] mb-2 flex items-center gap-2 border-b pb-1">
+                  <TrendingDown size={16} /> Operating
+                </h3>
+                <div className="grid grid-cols-1 gap-1">
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-slate-500">Rent</label>
+                    <input type="number" name="monthlyRent" value={project.monthlyRent} onChange={handleInputChange} className="w-24 border rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-slate-500">Staff</label>
+                    <input type="number" name="estimatedStaff" value={project.estimatedStaff} onChange={handleInputChange} className="w-24 border rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-slate-500">Bills</label>
+                    <input type="number" name="estimatedBills" value={project.estimatedBills} onChange={handleInputChange} className="w-24 border rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border shadow-sm flex flex-col flex-1 min-w-[220px]">
+                <div className="flex items-center justify-between border-b pb-1 mb-2">
+                  <h3 className="text-emerald-600 font-black uppercase text-[14px] flex items-center gap-2">
+                    <Layers size={16} /> Pricing
+                  </h3>
+                  <div className="flex items-center gap-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase">Steps</label>
+                    <input type="number" name="priceSteps" value={project.priceSteps} onChange={handleInputChange} className="w-10 border-2 border-blue-100 rounded p-0.5 text-center font-bold text-[12px]" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Beds (฿): Min / Max</p>
+                    <div className="flex gap-1">
+                      <input type="number" name="minPrice" value={project.minPrice} onChange={handleInputChange} className="w-1/2 border rounded p-1 text-center font-bold text-[14px]" />
+                      <input type="number" name="maxPrice" value={project.maxPrice} onChange={handleInputChange} className="w-1/2 border rounded p-1 text-center font-bold text-[14px]" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Rooms (฿): Min / Max</p>
+                    <div className="flex gap-1">
+                      <input type="number" name="roomMinPrice" value={project.roomMinPrice} onChange={handleInputChange} className="w-1/2 border rounded p-1 text-center font-bold text-[14px]" />
+                      <input type="number" name="roomMaxPrice" value={project.roomMaxPrice} onChange={handleInputChange} className="w-1/2 border rounded p-1 text-center font-bold text-[14px]" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border shadow-sm flex flex-col flex-1 min-w-[220px]">
+                <div className="flex items-center justify-between border-b pb-1 mb-2">
+                  <h3 className="text-blue-600 font-black uppercase text-[14px] flex items-center gap-2">
+                    <Target size={16} /> Goals
+                  </h3>
+                  <div className="flex items-center gap-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase">Steps</label>
+                    <input type="number" name="paybackSteps" value={project.paybackSteps} onChange={handleInputChange} className="w-10 border-2 border-blue-100 rounded p-0.5 text-center font-bold text-[12px]" />
+                  </div>
+                </div>
+                <div className="space-y-1 mt-1">
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-slate-500">Min Years</label>
+                    <input type="number" name="minPayback" value={project.minPayback} onChange={handleInputChange} className="w-20 border rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-slate-500">Max Years</label>
+                    <input type="number" name="maxPayback" value={project.maxPayback} onChange={handleInputChange} className="w-20 border rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section: REPAYMENT GOAL */}
+            <div className="flex flex-wrap items-baseline gap-2 border-b-4 border-slate-300 pb-1 mt-8 mb-2 px-2">
+              <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">REPAYMENT GOAL</h2>
+              <span className="text-[13px] font-bold text-slate-400 hidden sm:inline">|</span>
+              <p className="text-[13px] font-bold text-slate-500 uppercase">Monthly income needed to break even</p>
+            </div>
+
+            {/* Payback Goal Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 px-2">
+              {paybackTargets.map((t, idx) => (
+                <div key={idx} className="bg-slate-900 text-white p-3 rounded-lg border-l-4 border-blue-500 shadow-md flex flex-col justify-center">
+                  <p className="text-[14px] font-black text-blue-400 uppercase leading-none mb-1">{t.years.toFixed(1)}Y Goal</p>
+                  <p className="text-2xl font-black leading-none tracking-tighter text-white">฿{formatM(t.monthly)}<span className="text-[12px] font-normal text-slate-500 ml-1">/mo</span></p>
+                  <p className="text-[16px] text-emerald-400 font-bold border-t border-slate-700 mt-2 pt-1 uppercase">Yearly: ฿{formatM(t.monthly * 12)}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Section: RATES & OCCUPANCY CHART */}
+            <div className="flex flex-wrap items-baseline gap-2 border-b-4 border-slate-300 pb-1 mt-8 mb-2 px-2">
+              <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">RATES & OCCUPANCY CHART</h2>
+              <span className="text-[13px] font-bold text-slate-400 hidden sm:inline">|</span>
+              <p className="text-[13px] font-bold text-slate-500 uppercase">Income & breakeven at different rates and occupancy levels</p>
+            </div>
+
+            {/* Matrix & Chart Container */}
+            <div className="bg-white rounded-lg border shadow-sm flex flex-col mx-2">
+              <div className="flex bg-slate-100 border-b">
+                <button onClick={() => setActiveTab('table')} className={`px-10 py-3 text-[16px] font-black uppercase transition-all ${activeTab === 'table' ? 'bg-white text-blue-600 border-t-2 border-blue-600' : 'text-slate-500'}`}>Occupancy/Rate Matrix</button>
+                <button onClick={() => setActiveTab('chart')} className={`px-10 py-3 text-[16px] font-black uppercase transition-all ${activeTab === 'chart' ? 'bg-white text-blue-600 border-t-2 border-blue-600' : 'text-slate-500'}`}>Visual Trends</button>
+              </div>
+
+              <div className="flex-1 p-2">
+                {activeTab === 'table' ? (
+                  <table className="w-full border-collapse">
+                    <thead className="sticky top-0 z-20 bg-slate-800 text-white text-[14px] uppercase">
+                      <tr>
+                        <th className="p-3 border-r border-slate-700 sticky left-0 z-30 bg-slate-800 w-[140px]">฿ Price</th>
+                        {occupancyLevels.map(occ => <th key={occ} className="p-3 text-center border-r border-slate-700">{(occ * 100).toFixed(0)}%</th>)}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white">
+                      {priceTiers.map((tier, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 border-b">
+                          <td className="p-3 font-black text-[14px] bg-slate-50 border-r sticky left-0 z-10 text-center">
+                            <div>Beds: {Math.round(tier.bedPrice)}</div>
+                            <div>Rooms: {Math.round(tier.roomPrice)}</div>
+                          </td>
+                          {occupancyLevels.map(occ => {
+                            const net = ((project.numBeds * tier.bedPrice) + (project.numRooms * tier.roomPrice)) * occ * 30.42 * (1 - (project.commissionPct / 100));
+                            const profit = net - totals.monthlyOpEx;
+                            const cellClass = getCellStyles(net);
+                            const months = profit > 0 ? (totals.totalSunk / profit) : null;
+                            return (
+                              <td key={occ} className={`p-1 border align-middle ${cellClass}`}>
+                                <div className="flex flex-col items-center justify-center min-h-[50px]">
+                                  <span className="text-[16px] font-bold leading-none">{formatM(net)}</span>
+                                  <span className="text-[14px] font-black mt-1 leading-none">{months ? calculateRecoveryDisplay(months) : 'LOSS'}</span>
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="h-[600px] p-4 flex flex-col">
+                    <div className="flex justify-between items-center mb-4 bg-slate-50 p-4 rounded border">
+                      <h3 className="font-bold uppercase tracking-tight text-slate-700">Net Monthly Revenue vs Operating Floor</h3>
+                      <div className="flex gap-4 text-xs font-bold uppercase">
+                        <span className="text-red-500">Operating Cost</span>
+                        <span className="text-emerald-500">Recovery Goals</span>
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                          <XAxis dataKey="occupancy" axisLine={false} tickLine={false} tick={{fontSize: 14, fontWeight: 'bold'}} />
+                          <YAxis axisLine={false} tickLine={false} tick={{fontSize: 14, fontWeight: 'bold'}} tickFormatter={(v) => formatM(v)} />
+                          <Tooltip formatter={(v) => `฿${v.toLocaleString()}`} />
+                          <ReferenceLine y={totals.monthlyOpEx} stroke="#ef4444" strokeWidth={3} label={{ value: 'OPEX', position: 'insideLeft', fill: '#ef4444', fontSize: 12, fontWeight: '900' }} />
+                          {paybackTargets.map((t, idx) => (
+                            <ReferenceLine key={idx} y={t.monthly} stroke="#10b981" strokeDasharray="5 5" label={{ value: `${t.years.toFixed(1)}Y`, position: 'insideRight', fill: '#10b981', fontSize: 11, fontWeight: 'bold' }} />
+                          ))}
+                          {priceTiers.map((tier, idx) => (
+                            <Line key={idx} type="monotone" dataKey={`Tier_${idx}`} stroke={`hsl(${210 + (idx * 40)}, 70%, 50%)`} strokeWidth={3} dot={false} name={`B:฿${Math.round(tier.bedPrice)} R:฿${Math.round(tier.roomPrice)}`} />
+                          ))}
+                          <Legend verticalAlign="bottom" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Section: SCENARIOS */}
+            <div className="flex flex-wrap items-center gap-2 border-b-4 border-slate-300 pb-1 mt-8 mb-2 px-2">
+              <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">SCENARIOS</h2>
+              <span className="text-[13px] font-bold text-slate-400 hidden sm:inline">|</span>
+              <p className="text-[13px] font-bold text-slate-500 uppercase flex-1 min-w-[200px]">Profit/loss at different rate & occupancy level scenarios</p>
+              
+              <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                <label className="text-[12px] font-bold text-slate-500 uppercase">Apply Price:</label>
+                <select 
+                  value={scenarioTier} 
+                  onChange={(e) => setScenarioTier(e.target.value)}
+                  className="border-2 border-slate-300 rounded p-1 text-[13px] font-bold bg-white text-slate-700 outline-none cursor-pointer"
+                >
+                  <option value="dynamic">Dynamic (Default Mix)</option>
+                  {priceTiers.map((tier, idx) => (
+                    <option key={idx} value={idx}>B: ฿{Math.round(tier.bedPrice)} / R: ฿{Math.round(tier.roomPrice)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Scenario Analysis Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 px-2">
+              {activeScenarios.map((s, idx) => {
+                const net = ((project.numBeds * s.bedPrice) + (project.numRooms * s.roomPrice)) * s.occ * 30.42 * (1 - (project.commissionPct / 100));
+                const profitM = net - totals.monthlyOpEx;
+                
+                return (
+                  <div key={idx} className={`p-3 rounded-lg border-2 flex flex-col justify-between shadow-sm ${profitM <= 0 ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-2xl font-black leading-none">{(s.occ * 100)}%</span>
+                      <span className="text-[12px] font-black px-2 py-0.5 rounded bg-slate-100 uppercase tracking-tight">{s.label}</span>
+                    </div>
+                    <div className="text-[14px] font-bold border-b pb-2 mb-2 flex flex-col gap-1">
+                      <div className="flex justify-between"><span>Bed:</span> <span className="text-blue-600 font-black">฿{Math.round(s.bedPrice)}</span></div>
+                      <div className="flex justify-between"><span>Room:</span> <span className="text-blue-600 font-black">฿{Math.round(s.roomPrice)}</span></div>
+                      <div className="flex justify-between"><span>Net:</span> <span className="font-black text-slate-800">฿{formatM(net)}</span></div>
+                    </div>
+                    <div className="flex gap-0 text-[14px] font-black">
+                      <div className="w-1/2 flex flex-col border-r pr-2">
+                        <span className="text-[10px] text-slate-400 uppercase leading-none mb-1">Profit/Mo</span>
+                        <span className={profitM > 0 ? 'text-emerald-600' : 'text-red-600'}>฿{formatM(profitM)}</span>
+                      </div>
+                      <div className="w-1/2 flex flex-col pl-2 text-right">
+                        <span className="text-[10px] text-slate-400 uppercase leading-none mb-1">Profit/Yr</span>
+                        <span className={profitM > 0 ? 'text-emerald-500' : 'text-red-500'}>฿{formatM(profitM * 12)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Section: BREAKEVEN OCCUPANCY */}
+            <div className="flex flex-wrap items-baseline gap-2 border-b-4 border-slate-300 pb-1 mt-8 mb-2 px-2">
+              <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">BREAKEVEN OCCUPANCY</h2>
+              <span className="text-[13px] font-bold text-slate-400 hidden sm:inline">|</span>
+              <p className="text-[13px] font-bold text-slate-500 uppercase">Occupancy level needed to breakeven on investment</p>
+            </div>
+
+            {/* Breakeven Thresholds matching the Scenarios */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 pb-8 px-2">
+              {priceTiers.map((tier, idx) => {
+                const beOcc = Math.ceil((totals.monthlyOpEx / (((project.numBeds * tier.bedPrice) + (project.numRooms * tier.roomPrice)) * 30.42 * (1 - project.commissionPct/100))) * 100);
+                return (
+                  <div key={idx} className="bg-slate-900 p-4 rounded-xl text-white shadow-md border-l-4 border-emerald-500 flex flex-col justify-center">
+                    <div className="flex justify-between items-center mb-2 border-b border-slate-700 pb-2">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Breakeven</span>
+                      <span className="text-[12px] font-black text-emerald-400">B:฿{Math.round(tier.bedPrice)} | R:฿{Math.round(tier.roomPrice)}</span>
+                    </div>
+                    <p className="text-3xl font-black font-mono mt-1">{beOcc}% <span className="text-[12px] font-normal text-slate-500 uppercase ml-1">Occ</span></p>
+                  </div>
+                );
+              })}
+            </div>
+
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
