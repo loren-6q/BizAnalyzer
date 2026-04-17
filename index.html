@@ -71,19 +71,38 @@
     const Trash2 = (p) => <SvgIcon {...p}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></SvgIcon>;
     const FolderOpen = (p) => <SvgIcon {...p}><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></SvgIcon>;
 
-    // --- Firebase Setup ---
-    const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? JSON.parse(window.__firebase_config) : {};
+    // --- Firebase Setup & Configuration ---
+    // If you want to host this file yourself, create a free Firebase project and paste the config here:
+    const MY_FIREBASE_CONFIG = {
+      apiKey: "AIzaSyAJ7lZmBEZrM-LlBW0w7hgXJpxMa0B98Ds",
+      authDomain: "biz-analyzer1.firebaseapp.com",
+      projectId: "biz-analyzer1",
+      storageBucket: "biz-analyzer1.firebasestorage.app",
+      messagingSenderId: "498847838509",
+      appId: "1:498847838509:web:76101ee92060762c2423a4"
+    };
+
+    // Attempt to automatically use the preview environment config if available, otherwise fallback to user's config
+    let envConfig = {};
+    if (typeof __firebase_config !== 'undefined') {
+      envConfig = typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config;
+    }
+    const firebaseConfig = Object.keys(envConfig).length > 0 ? envConfig : MY_FIREBASE_CONFIG;
+    
     let app, auth, db;
     try {
       if (Object.keys(firebaseConfig).length > 0) {
         app = initializeApp(firebaseConfig);
         auth = getAuth(app);
         db = getFirestore(app);
+      } else {
+        console.warn("No Firebase configuration found. Cloud save features are disabled.");
       }
     } catch(e) {
-      console.log("Firebase setup skipped/failed. Save features disabled locally.");
+      console.error("Firebase setup failed.", e);
     }
-    const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'hostel-analyzer-local';
+
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'hostel-analyzer-local';
 
     // --- Default Project Template ---
     const defaultProject = {
@@ -121,8 +140,8 @@
         if(!auth) return;
         const initAuth = async () => {
           try {
-            if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
-              await signInWithCustomToken(auth, window.__initial_auth_token);
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+              await signInWithCustomToken(auth, __initial_auth_token);
             } else {
               await signInAnonymously(auth);
             }
@@ -148,7 +167,10 @@
       }, [user]);
 
       const handleSave = async () => {
-        if (!user || !db) { alert("Save requires Firebase configuration."); return; }
+        if (!user || !db) { 
+          alert("To save projects, you must add your Firebase configuration to the HTML file (Look for MY_FIREBASE_CONFIG in the code)."); 
+          return; 
+        }
         setIsSaving(true);
         try {
           const projectId = project.id || crypto.randomUUID();
@@ -158,6 +180,7 @@
           setProject(projectData);
         } catch (error) {
           console.error("Error saving project", error);
+          alert("Failed to save project. Check console for details.");
         }
         setIsSaving(false);
       };
