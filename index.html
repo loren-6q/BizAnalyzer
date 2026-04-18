@@ -72,7 +72,6 @@
     const FolderOpen = (p) => <SvgIcon {...p}><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/></SvgIcon>;
 
     // --- Firebase Setup & Configuration ---
-    // If you want to host this file yourself, create a free Firebase project and paste the config here:
     const MY_FIREBASE_CONFIG = {
       apiKey: "AIzaSyAJ7lZmBEZrM-LlBW0w7hgXJpxMa0B98Ds",
       authDomain: "biz-analyzer1.firebaseapp.com",
@@ -115,6 +114,7 @@
       priceSteps: 10,
       roomMinPrice: 1000,
       roomMaxPrice: 3000,
+      extraMonthlyIncome: 0,
       minPayback: 1,
       maxPayback: 5,
       paybackSteps: 4,
@@ -140,8 +140,8 @@
         if(!auth) return;
         const initAuth = async () => {
           try {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-              await signInWithCustomToken(auth, __initial_auth_token);
+            if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+              await signInWithCustomToken(auth, window.__initial_auth_token);
             } else {
               await signInAnonymously(auth);
             }
@@ -279,7 +279,7 @@
         return occupancyLevels.map(occ => {
           const entry = { occupancy: `${(occ * 100).toFixed(0)}%` };
           priceTiers.forEach((tier, idx) => {
-            const net = ((project.numBeds * tier.bedPrice) + (project.numRooms * tier.roomPrice)) * occ * 30.42 * (1 - (project.commissionPct / 100));
+            const net = ((project.numBeds * tier.bedPrice) + (project.numRooms * tier.roomPrice)) * occ * 30.42 * (1 - (project.commissionPct / 100)) + ((project.extraMonthlyIncome || 0) * occ);
             entry[`Tier_${idx}`] = Math.round(net);
           });
           return entry;
@@ -387,6 +387,7 @@
 
             {/* Square Input Cards Grid */}
             <div className="flex flex-wrap gap-2.5 justify-start px-2">
+              {/* Setup */}
               <div className="bg-white p-3 rounded-lg border shadow-sm flex flex-col flex-1 min-w-[220px]">
                 <h3 className="text-blue-600 font-black uppercase text-[14px] mb-2 flex items-center gap-2 border-b pb-1">
                   <Settings2 size={16} /> Setup
@@ -407,6 +408,7 @@
                 </div>
               </div>
 
+              {/* Capital */}
               <div className="bg-white p-3 rounded-lg border shadow-sm flex flex-col flex-1 min-w-[220px]">
                 <h3 className="text-orange-600 font-black uppercase text-[14px] mb-2 flex items-center gap-2 border-b pb-1">
                   <Zap size={16} /> Capital
@@ -427,6 +429,7 @@
                 </div>
               </div>
 
+              {/* Operating */}
               <div className="bg-white p-3 rounded-lg border shadow-sm flex flex-col flex-1 min-w-[220px]">
                 <h3 className="text-red-600 font-black uppercase text-[14px] mb-2 flex items-center gap-2 border-b pb-1">
                   <TrendingDown size={16} /> Operating
@@ -447,6 +450,7 @@
                 </div>
               </div>
 
+              {/* Pricing */}
               <div className="bg-white p-3 rounded-lg border shadow-sm flex flex-col flex-1 min-w-[220px]">
                 <div className="flex items-center justify-between border-b pb-1 mb-2">
                   <h3 className="text-emerald-600 font-black uppercase text-[14px] flex items-center gap-2">
@@ -475,6 +479,7 @@
                 </div>
               </div>
 
+              {/* Goals */}
               <div className="bg-white p-3 rounded-lg border shadow-sm flex flex-col flex-1 min-w-[220px]">
                 <div className="flex items-center justify-between border-b pb-1 mb-2">
                   <h3 className="text-blue-600 font-black uppercase text-[14px] flex items-center gap-2">
@@ -494,6 +499,20 @@
                     <label className="font-bold text-[14px] uppercase text-slate-500">Max Years</label>
                     <input type="number" name="maxPayback" value={project.maxPayback} onChange={handleInputChange} className="w-20 border rounded p-1 font-bold text-[16px] text-right" />
                   </div>
+                </div>
+              </div>
+
+              {/* Extra Revenue */}
+              <div className="bg-white p-3 rounded-lg border shadow-sm flex flex-col w-full sm:w-[250px] shrink-0">
+                <h3 className="text-teal-600 font-black uppercase text-[14px] mb-2 flex items-center gap-2 border-b pb-1">
+                  <Plus size={16} /> Extra Revenue
+                </h3>
+                <div className="space-y-2 mt-1">
+                  <div className="flex justify-between items-center">
+                    <label className="font-bold text-[14px] uppercase text-slate-500">Max Monthly</label>
+                    <input type="number" name="extraMonthlyIncome" value={project.extraMonthlyIncome} onChange={handleInputChange} className="w-24 border rounded p-1 font-bold text-[16px] text-right" />
+                  </div>
+                  <p className="text-[11px] font-bold text-slate-400 leading-tight mt-2">Expected extra income at 100% occupancy (F&B, Tours, Rentals, etc.)</p>
                 </div>
               </div>
             </div>
@@ -547,7 +566,7 @@
                             <div>Rooms: {Math.round(tier.roomPrice)}</div>
                           </td>
                           {occupancyLevels.map(occ => {
-                            const net = ((project.numBeds * tier.bedPrice) + (project.numRooms * tier.roomPrice)) * occ * 30.42 * (1 - (project.commissionPct / 100));
+                            const net = ((project.numBeds * tier.bedPrice) + (project.numRooms * tier.roomPrice)) * occ * 30.42 * (1 - (project.commissionPct / 100)) + ((project.extraMonthlyIncome || 0) * occ);
                             const profit = net - totals.monthlyOpEx;
                             const cellClass = getCellStyles(net);
                             const months = profit > 0 ? (totals.totalSunk / profit) : null;
@@ -620,7 +639,8 @@
             {/* Scenario Analysis Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 px-2">
               {activeScenarios.map((s, idx) => {
-                const net = ((project.numBeds * s.bedPrice) + (project.numRooms * s.roomPrice)) * s.occ * 30.42 * (1 - (project.commissionPct / 100));
+                const extraRev = (project.extraMonthlyIncome || 0) * s.occ;
+                const net = ((project.numBeds * s.bedPrice) + (project.numRooms * s.roomPrice)) * s.occ * 30.42 * (1 - (project.commissionPct / 100)) + extraRev;
                 const profitM = net - totals.monthlyOpEx;
                 
                 return (
@@ -629,10 +649,23 @@
                       <span className="text-2xl font-black leading-none">{(s.occ * 100)}%</span>
                       <span className="text-[12px] font-black px-2 py-0.5 rounded bg-slate-100 uppercase tracking-tight">{s.label}</span>
                     </div>
-                    <div className="text-[14px] font-bold border-b pb-2 mb-2 flex flex-col gap-1">
-                      <div className="flex justify-between"><span>Bed:</span> <span className="text-blue-600 font-black">฿{Math.round(s.bedPrice)}</span></div>
-                      <div className="flex justify-between"><span>Room:</span> <span className="text-blue-600 font-black">฿{Math.round(s.roomPrice)}</span></div>
-                      <div className="flex justify-between"><span>Net:</span> <span className="font-black text-slate-800">฿{formatM(net)}</span></div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[13px] font-bold border-b pb-2 mb-2">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400 uppercase leading-none">Bed</span>
+                        <span className="text-blue-600 font-black">฿{Math.round(s.bedPrice)}</span>
+                      </div>
+                      <div className="flex flex-col text-right">
+                        <span className="text-[10px] text-slate-400 uppercase leading-none">Room</span>
+                        <span className="text-blue-600 font-black">฿{Math.round(s.roomPrice)}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400 uppercase leading-none">Extra</span>
+                        <span className="text-teal-600 font-black">฿{formatM(extraRev)}</span>
+                      </div>
+                      <div className="flex flex-col text-right">
+                        <span className="text-[10px] text-slate-400 uppercase leading-none">Net</span>
+                        <span className="font-black text-slate-800">฿{formatM(net)}</span>
+                      </div>
                     </div>
                     <div className="flex gap-0 text-[14px] font-black">
                       <div className="w-1/2 flex flex-col border-r pr-2">
@@ -659,7 +692,9 @@
             {/* Breakeven Thresholds matching the Scenarios */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 pb-8 px-2">
               {priceTiers.map((tier, idx) => {
-                const beOcc = Math.ceil((totals.monthlyOpEx / (((project.numBeds * tier.bedPrice) + (project.numRooms * tier.roomPrice)) * 30.42 * (1 - project.commissionPct/100))) * 100);
+                const maxRoomBedRev = ((project.numBeds * tier.bedPrice) + (project.numRooms * tier.roomPrice)) * 30.42 * (1 - project.commissionPct/100);
+                const totalMaxRev = maxRoomBedRev + (project.extraMonthlyIncome || 0);
+                const beOcc = Math.max(0, Math.ceil((totals.monthlyOpEx / totalMaxRev) * 100));
                 return (
                   <div key={idx} className="bg-slate-900 p-4 rounded-xl text-white shadow-md border-l-4 border-emerald-500 flex flex-col justify-center">
                     <div className="flex justify-between items-center mb-2 border-b border-slate-700 pb-2">
@@ -680,6 +715,6 @@
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
-      <script src="https://loren-6q.github.io/WETNav/nav.js"></script>
+  <script src="https://loren-6q.github.io/WETNav/nav.js"></script>
 </body>
 </html>
